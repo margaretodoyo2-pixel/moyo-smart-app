@@ -591,13 +591,26 @@ let cUser=null,cProfile=null,canvasItems=[],dragItem=null;
 
 async function init(){
   try{
-    const {data:{session}} = await sb.auth.getSession();
-    if(session) await onLogin(session.user);
-    else showScreen('login');
+    const { data: { session } } = await sb.auth.getSession();
 
-    sb.auth.onAuthStateChange(async(e,s)=>{
-      if(e==='SIGNED_IN' && s) await onLogin(s.user);
-      if(e==='SIGNED_OUT') showScreen('login');
+    if(session?.user){
+      await onLogin(session.user);
+    }else{
+      showScreen('login');
+    }
+
+    sb.auth.onAuthStateChange(async (e, s) => {
+      console.log('AUTH EVENT:', e);
+
+      if(e === 'SIGNED_IN' && s?.user){
+        await onLogin(s.user);
+      }
+
+      if(e === 'SIGNED_OUT'){
+        cUser = null;
+        cProfile = null;
+        showScreen('login');
+      }
     });
   }catch(err){
     console.error(err);
@@ -606,46 +619,102 @@ async function init(){
 }
 
 async function onLogin(user){
-  cUser=user;
-  const {data:p,error} = await sb.from('profiles').select('*').eq('id',user.id).single();
-  if(error || !p){
-    console.warn('Profile missing', error);
-    showScreen('login');
-    showErr(document.getElementById('login-error'),'Profile not found. Please contact admin.',true);
-    return;
-  }
-  cProfile=p;
+  cUser = user;
 
-  if(p.role==='clinician'){
-    document.getElementById('c-name').textContent=p.full_name || 'Clinician';
-    document.getElementById('c-av').textContent=gi(p.full_name);
-    showScreen('clinician');
-    loadClinicianData();
-  }else if(p.role==='admin'){
-    document.getElementById('a-name').textContent=p.full_name || 'Admin';
-    document.getElementById('a-av').textContent=gi(p.full_name);
-    showScreen('admin');
-    loadAdminData();
-  }else{
-    document.getElementById('p-av').textContent=gi(p.full_name);
-    const h=new Date().getHours();
-    const g=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
-    document.getElementById('p-greeting').textContent=g+', '+(p.full_name || 'Patient').split(' ')[0];
-    showScreen('patient');
+  try{
+    const { data: p, error } = await sb
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    console.log('PROFILE DATA:', p);
+    console.log('PROFILE ERROR:', error);
+
+    if(error || !p){
+      showScreen('login');
+      showErr(
+        document.getElementById('login-error'),
+        'Profile not found or not accessible.',
+        true
+      );
+      return;
+    }
+
+    cProfile = p;
+
+    if(p.role === 'clinician'){
+      document.getElementById('c-name').textContent = p.full_name || 'Clinician';
+      document.getElementById('c-av').textContent = gi(p.full_name);
+      showScreen('clinician');
+      loadClinicianData();
+    }else if(p.role === 'admin'){
+      document.getElementById('a-name').textContent = p.full_name || 'Admin';
+      document.getElementById('a-av').textContent = gi(p.full_name);
+      showScreen('admin');
+      loadAdminData();
+    }else{
+      document.getElementById('p-av').textContent = gi(p.full_name);
+      const h = new Date().getHours();
+      const g = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+      document.getElementById('p-greeting').textContent =
+        g + ', ' + (p.full_name || 'Patient').split(' ')[0];
+      showScreen('patient');
+    }
+  }catch(e){
+    console.error('ONLOGIN EXCEPTION:', e);
+    showScreen('login');
+    showErr(
+      document.getElementById('login-error'),
+      e.message || 'Could not load profile.',
+      true
+    );
+  }finally{
+    const btn = document.getElementById('btn-login');
+    if(btn){
+      btn.textContent = 'Sign in';
+      btn.disabled = false;
+    }
   }
 }
-
 async function doLogin(){
-  const email=document.getElementById('login-email').value.trim();
-  const pass=document.getElementById('login-password').value;
-  const btn=document.getElementById('btn-login');
-  const err=document.getElementById('login-error');
-  if(!email||!pass){showErr(err,'Please enter your email and password.',true);return;}
-  btn.textContent='Signing in...';btn.disabled=true;
-  const {error}=await sb.auth.signInWithPassword({email,password:pass});
-  btn.textContent='Sign in';btn.disabled=false;
-  if(error) showErr(err,error.message,true);
-  else err.style.display='none';
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+  const btn = document.getElementById('btn-login');
+  const err = document.getElementById('login-error');
+
+  if(!email || !pass){
+    showErr(err, 'Please enter your email and password.', true);
+    return;
+  }
+
+  btn.textContent = 'Signing in...';
+  btn.disabled = true;
+
+  try{
+    const { data, error } = await sb.auth.signInWithPassword({
+      email,
+      password: pass
+    });
+
+    console.log('LOGIN DATA:', data);
+    console.log('LOGIN ERROR:', error);
+
+    if(error){
+      showErr(err, error.message, true);
+      return;
+    }
+
+    err.style.display = 'none';
+  }catch(e){
+    console.error('LOGIN EXCEPTION:', e);
+    showErr(err, e.message || 'Sign in failed.', true);
+  }finally{
+    if(!cProfile){
+      btn.textContent = 'Sign in';
+      btn.disabled = false;
+    }
+  }
 }
 
 async function doSignup(){
