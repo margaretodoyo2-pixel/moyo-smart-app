@@ -718,26 +718,51 @@ async function doLogin(){
 }
 
 async function doSignup(){
-  const name=document.getElementById('signup-name').value.trim();
-  const email=document.getElementById('signup-email').value.trim();
-  const pass=document.getElementById('signup-password').value;
-  const role=document.getElementById('signup-role').value;
-  const btn=document.getElementById('btn-signup');
-  const err=document.getElementById('signup-error');
+  const name = document.getElementById('signup-name').value.trim();
+  const email = document.getElementById('signup-email').value.trim();
+  const pass = document.getElementById('signup-password').value;
+  const role = document.getElementById('signup-role').value;
+  const btn = document.getElementById('btn-signup');
+  const err = document.getElementById('signup-error');
 
-  if(!name||!email||!pass){showErr(err,'Please fill in all fields.',true);return;}
-  if(pass.length<6){showErr(err,'Password must be at least 6 characters.',true);return;}
+  if(!name || !email || !pass){
+    showErr(err, 'Please fill in all fields.', true);
+    return;
+  }
 
-  btn.textContent='Requesting access...';btn.disabled=true;
-  const {error}=await sb.auth.signUp({
-    email,
-    password:pass,
-    options:{data:{full_name:name,role}}
-  });
-  btn.textContent='Request access';btn.disabled=false;
+  if(pass.length < 6){
+    showErr(err, 'Password must be at least 6 characters.', true);
+    return;
+  }
 
-  if(error) showErr(err,error.message,true);
-  else showScreen('pending');
+  btn.textContent = 'Requesting access...';
+  btn.disabled = true;
+
+  try{
+    const { data, error } = await sb.auth.signUp({
+      email,
+      password: pass,
+      options: {
+        data: { full_name: name, role }
+      }
+    });
+
+    console.log('SIGNUP DATA:', data);
+    console.log('SIGNUP ERROR:', error);
+
+    if(error){
+      showErr(err, error.message, true);
+      return;
+    }
+
+    showScreen('pending');
+  }catch(e){
+    console.error('SIGNUP EXCEPTION:', e);
+    showErr(err, e.message || 'Signup failed.', true);
+  }finally{
+    btn.textContent = 'Request access';
+    btn.disabled = false;
+  }
 }
 
 async function doSignOut(){
